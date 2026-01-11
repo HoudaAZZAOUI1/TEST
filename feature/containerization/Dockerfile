@@ -34,10 +34,15 @@ COPY --from=builder /root/.local /root/.local
 # Make sure scripts in .local are usable
 ENV PATH=/root/.local/bin:$PATH
 
+# Create static directory first
+RUN mkdir -p ./static/
+
 # Copy application code
 COPY api_files/app.py .
 COPY api_files/data_preprocessing.py .
 COPY api_files/recommendation_model.py .
+
+# Copy static files if they exist (directory must exist in build context)
 COPY api_files/static/ ./static/
 
 # Create directories for models and data

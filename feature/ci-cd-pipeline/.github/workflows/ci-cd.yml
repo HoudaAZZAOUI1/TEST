@@ -51,21 +51,25 @@ jobs:
       if: matrix.test-suite == 'preprocessing'
       run: |
         cd feature/data-preprocessing
+        export PYTHONPATH="${PYTHONPATH}:$(pwd)"
         pytest tests/ -v --cov=data_preprocessing --cov-report=xml --cov-report=term
     
     - name: Run model tests
       if: matrix.test-suite == 'model'
       run: |
         cd feature/ml-model
+        export PYTHONPATH="${PYTHONPATH}:$(pwd)"
         pytest tests/ -v --cov=recommendation_model --cov-report=xml --cov-report=term
     
     - name: Run API tests
       if: matrix.test-suite == 'api'
       run: |
         cd feature/api-development
+        export PYTHONPATH="${PYTHONPATH}:$(pwd)"
         pytest tests/ -v --cov=app --cov-report=xml --cov-report=term
     
     - name: Upload coverage to Codecov
+      if: always()
       uses: codecov/codecov-action@v3
       with:
         files: |
@@ -74,6 +78,7 @@ jobs:
           feature/api-development/coverage.xml
         flags: ${{ matrix.test-suite }}
         name: ${{ matrix.test-suite }}-coverage
+        fail_ci_if_error: false
       continue-on-error: true
 
   lint:
@@ -140,10 +145,19 @@ jobs:
       run: |
         mkdir -p feature/containerization/api_files
         cp feature/api-development/app.py feature/containerization/api_files/
-        cp -r feature/api-development/static feature/containerization/api_files/
+        # Copy static directory or create empty one
+        if [ -d "feature/api-development/static" ]; then
+          cp -r feature/api-development/static feature/containerization/api_files/
+        else
+          mkdir -p feature/containerization/api_files/static
+          echo "<!DOCTYPE html><html><body><h1>API Running</h1></body></html>" > feature/containerization/api_files/static/index.html
+        fi
         cp feature/data-preprocessing/data_preprocessing.py feature/containerization/api_files/
         cp feature/ml-model/recommendation_model.py feature/containerization/api_files/
         cp feature/api-development/requirements.txt feature/containerization/api_files/
+        echo "Files copied for Docker build:"
+        ls -la feature/containerization/api_files/
+        ls -la feature/containerization/api_files/static/ || echo "Static directory check"
     
     - name: Build and push Docker image
       uses: docker/build-push-action@v5
