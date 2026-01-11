@@ -176,7 +176,7 @@ jobs:
     if: github.ref == 'refs/heads/develop'
     environment:
       name: staging
-      url: ${{ secrets.STAGING_URL || 'https://staging.example.com' }}
+      url: https://staging.example.com
     
     steps:
     - uses: actions/checkout@v4
@@ -196,7 +196,7 @@ jobs:
     if: github.ref == 'refs/heads/main'
     environment:
       name: production
-      url: ${{ secrets.PRODUCTION_URL || 'https://production.example.com' }}
+      url: https://production.example.com
     
     steps:
     - uses: actions/checkout@v4
