@@ -13,7 +13,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements
-COPY requirements.txt .
+COPY api_files/requirements.txt .
 
 # Install Python dependencies
 RUN pip install --no-cache-dir --user -r requirements.txt
@@ -35,10 +35,10 @@ COPY --from=builder /root/.local /root/.local
 ENV PATH=/root/.local/bin:$PATH
 
 # Copy application code
-COPY data_preprocessing.py .
-COPY recommendation_model.py .
-COPY app.py .
-COPY static/ ./static/
+COPY api_files/app.py .
+COPY api_files/data_preprocessing.py .
+COPY api_files/recommendation_model.py .
+COPY api_files/static/ ./static/
 
 # Create directories for models and data
 RUN mkdir -p models data logs

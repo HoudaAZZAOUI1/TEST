@@ -8,7 +8,7 @@ import numpy as np
 from sklearn.model_selection import train_test_split
 from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.metrics import mean_squared_error, mean_absolute_error
-from scipy.sparse import csr_matrix
+from scipy.sparse import csr_matrix, issparse
 import mlflow
 import mlflow.sklearn
 from typing import List, Tuple, Dict
@@ -41,6 +41,10 @@ class CollaborativeFilteringModel:
         """Create user-item interaction matrix"""
         logger.info("Creating interaction matrix...")
         
+        # Check if dataframe is empty
+        if df.empty:
+            raise ValueError("Cannot create interaction matrix from empty dataframe")
+        
         # Filter users and products with minimum interactions
         user_counts = df['user_id'].value_counts()
         product_counts = df['product_id'].value_counts()
@@ -52,6 +56,10 @@ class CollaborativeFilteringModel:
             (df['user_id'].isin(valid_users)) & 
             (df['product_id'].isin(valid_products))
         ]
+        
+        # Check if filtered dataframe is empty
+        if df_filtered.empty:
+            raise ValueError("No valid interactions found after filtering (all users/products have fewer than min_interactions)")
         
         logger.info(f"Filtered to {len(df_filtered)} interactions")
         logger.info(f"Users: {len(valid_users)}, Products: {len(valid_products)}")
@@ -91,8 +99,17 @@ class CollaborativeFilteringModel:
         if user_idx >= len(self.user_similarity):
             return np.zeros(self.user_item_matrix.shape[1])
         
-        # Get similar users
-        user_sim = self.user_similarity[user_idx].toarray().flatten()
+        # Get similar users - handle both sparse and dense matrices
+        if issparse(self.user_similarity):
+            user_sim = self.user_similarity[user_idx].toarray().flatten()
+        else:
+            # Already a dense array
+            user_sim = self.user_similarity[user_idx].flatten() if self.user_similarity.ndim > 1 else self.user_similarity[user_idx]
+            if user_sim.ndim > 0:
+                user_sim = user_sim.flatten()
+            else:
+                user_sim = np.array([user_sim])
+        
         top_similar_users = np.argsort(user_sim)[::-1][1:top_k+1]
         
         # Weighted average of similar users' ratings
@@ -122,7 +139,17 @@ class CollaborativeFilteringModel:
         
         for item_idx in range(len(user_ratings)):
             if user_ratings[item_idx] == 0:  # Only predict for unrated items
-                item_sim = self.item_similarity[item_idx].toarray().flatten()
+                # Handle both sparse and dense matrices
+                if issparse(self.item_similarity):
+                    item_sim = self.item_similarity[item_idx].toarray().flatten()
+                else:
+                    # Already a dense array
+                    item_sim = self.item_similarity[item_idx].flatten() if self.item_similarity.ndim > 1 else self.item_similarity[item_idx]
+                    if item_sim.ndim > 0:
+                        item_sim = item_sim.flatten()
+                    else:
+                        item_sim = np.array([item_sim])
+                
                 rated_items = np.where(user_ratings > 0)[0]
                 
                 if len(rated_items) > 0:

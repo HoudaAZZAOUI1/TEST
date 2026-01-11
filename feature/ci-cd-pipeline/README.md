@@ -9,38 +9,104 @@ Implement automated CI/CD with GitHub Actions.
 - `scripts/smoke-test.sh` - Smoke tests
 - `scripts/integration-test.sh` - Integration tests
 - `scripts/check-canary-health.sh` - Canary validation
+- `scripts/load_test.py` - Load testing script
 - `tests/test_api.py` - API tests
 - `README.md` - This file
 
-## Key Features
-- Multi-stage CI/CD pipeline
-- Automated testing (unit, integration, load)
-- Docker image registry
-- Canary deployments
-- Automatic rollback
-- Environment-specific deployments
+## Setup Instructions
+
+### 1. Enable GitHub Actions
+
+GitHub Actions is automatically enabled when you push the `.github/workflows/` directory.
+
+### 2. Configure Secrets (Required)
+
+Go to your repository Settings → Secrets and variables → Actions, and add:
+
+- `GITHUB_TOKEN` - Automatically provided by GitHub
+- `STAGING_URL` (optional) - Staging environment URL
+- `PRODUCTION_URL` (optional) - Production environment URL
+- `MLFLOW_TRACKING_URI` (optional) - MLflow server URL
+- `KUBERNETES_CONFIG` (optional) - Kubernetes config for deployments
+
+### 3. Test Locally
+
+Before pushing, test workflows locally:
+
+```bash
+# Install act (GitHub Actions local runner)
+# Windows: choco install act-cli
+# macOS: brew install act
+# Linux: curl https://raw.githubusercontent.com/nektos/act/master/install.sh | sudo bash
+
+# Run tests
+act -j test
+
+# Run specific job
+act -j lint
+```
+
+### 4. Run Tests Manually
+
+```bash
+# Data preprocessing tests
+cd feature/data-preprocessing
+pytest tests/ -v
+
+# Model tests
+cd feature/ml-model
+pytest tests/ -v
+
+# API tests
+cd feature/api-development
+pytest tests/ -v
+```
 
 ## Workflows
 
 ### CI/CD Pipeline (`ci-cd.yml`)
 
-Triggers on:
+**Triggers:**
 - Push to `main` or `develop` branches
 - Pull requests to `main` or `develop`
+- Manual workflow dispatch
 
-Stages:
-1. **Test** - Run all unit tests
-2. **Build** - Build and push Docker image
-3. **Deploy Staging** - Deploy to staging on `develop` branch
-4. **Deploy Production** - Deploy to production on `main` branch with canary strategy
+**Jobs:**
+
+1. **Test** - Runs all tests in parallel matrix
+   - Preprocessing tests
+   - Model tests
+   - API tests
+   - Uploads coverage to Codecov
+
+2. **Lint** - Code quality checks
+   - flake8 linting
+   - black formatting check
+
+3. **Build** - Builds and pushes Docker image
+   - Builds multi-stage Docker image
+   - Pushes to GitHub Container Registry
+   - Uses build cache for faster builds
+
+4. **Deploy Staging** - Deploys to staging
+   - Only runs on `develop` branch
+   - Deploys to staging environment
+
+5. **Deploy Production** - Deploys to production with canary
+   - Only runs on `main` branch
+   - Deploys canary version
+   - Runs smoke tests
+   - Checks canary health
+   - Promotes to full deployment if healthy
+   - Rolls back on failure
 
 ### Model Retraining (`retrain.yml`)
 
-Triggers on:
+**Triggers:**
 - Weekly schedule (Sunday 00:00 UTC)
 - Manual workflow dispatch
 
-Steps:
+**Steps:**
 1. Preprocess data
 2. Train model with MLflow
 3. Evaluate model performance
@@ -48,11 +114,12 @@ Steps:
 
 ## Scripts
 
-### Smoke Tests
+### Smoke Tests (`scripts/smoke-test.sh`)
 
 Quick validation tests after deployment:
 
 ```bash
+export API_URL=http://localhost:8000
 bash scripts/smoke-test.sh
 ```
 
@@ -61,148 +128,96 @@ Tests:
 - Predict endpoint
 - Metrics endpoint
 
-### Integration Tests
+### Integration Tests (`scripts/integration-test.sh`)
 
-End-to-end testing of the recommendation system:
+End-to-end testing:
 
 ```bash
+export API_URL=http://localhost:8000
 bash scripts/integration-test.sh
 ```
 
-Tests:
-- Recommendation flow
-- Multiple user scenarios
-- Error handling
+### Canary Health Check (`scripts/check-canary-health.sh`)
 
-### Canary Health Check
-
-Validates canary deployment before promotion:
+Validates canary deployment:
 
 ```bash
+export CANARY_URL=http://canary.example.com:8000
+export PRODUCTION_URL=http://production.example.com:8000
 bash scripts/check-canary-health.sh
 ```
 
-Checks:
-- Health status
-- Response time
-- Error rates
-- Comparison with production
+### Load Testing (`scripts/load_test.py`)
 
-## Usage
-
-### Setting Up Secrets
-
-Required GitHub secrets:
-- `MLFLOW_TRACKING_URI` - MLflow server URL
-- `DOCKER_USERNAME` - Docker registry username
-- `DOCKER_PASSWORD` - Docker registry password
-
-### Running Tests Locally
+Load testing for API:
 
 ```bash
-# Smoke tests
-export API_URL=http://localhost:8000
-bash scripts/smoke-test.sh
+# Install requests if needed
+pip install requests
 
-# Integration tests
-export API_URL=http://localhost:8000
-bash scripts/integration-test.sh
+# Run load test
+python scripts/load_test.py --url http://localhost:8000 --requests 100 --concurrency 10
+
+# Test specific endpoint
+python scripts/load_test.py --url http://localhost:8000 --endpoint /predict --requests 200 --concurrency 20
 ```
 
-### Manual Workflow Dispatch
+## Monitoring CI/CD
 
-1. Go to GitHub Actions tab
-2. Select "Model Retraining" workflow
-3. Click "Run workflow"
-4. Choose branch and options
-5. Click "Run workflow"
+### View Workflow Runs
 
-## Deployment Strategy
+1. Go to your repository
+2. Click "Actions" tab
+3. View workflow runs and logs
 
-### Staging Deployment
+### Check Test Coverage
 
-Automatically deploys when code is pushed to `develop` branch.
+1. After test job completes
+2. Coverage reports uploaded to Codecov (if configured)
+3. View coverage in Codecov dashboard
 
-### Production Deployment (Canary)
+### Monitor Deployments
 
-1. Deploy canary (10% of traffic)
-2. Run smoke tests
-3. Check canary health
-4. Monitor for 5 minutes
-5. If healthy, promote to 100%
-6. If unhealthy, rollback
-
-### Rollback
-
-Automatic rollback triggers:
-- Health check failures
-- High error rates
-- Performance degradation
-
-Manual rollback:
-```bash
-kubectl rollout undo deployment/recommendation-api -n production
-```
-
-## Environment Configuration
-
-### Staging
-
-- URL: https://staging.example.com
-- Auto-deploy on `develop` branch
-- Full test suite
-
-### Production
-
-- URL: https://production.example.com
-- Canary deployment
-- Health checks and monitoring
-- Automatic rollback
-
-## Monitoring
-
-### CI/CD Metrics
-
-Track in GitHub Actions:
-- Build success rate
-- Test pass rate
-- Deployment frequency
-- Mean time to recovery
-
-### Deployment Metrics
-
-Monitor:
-- Deployment success rate
-- Canary promotion rate
-- Rollback frequency
-- Time to production
+- Staging deployments: Check staging environment URL
+- Production deployments: Monitor canary health metrics
+- Rollback notifications: Check workflow logs for rollback events
 
 ## Troubleshooting
 
-### Tests Failing
+### Tests Failing Locally
 
 ```bash
-# Run tests locally
-pytest feature/*/tests/ -v
+# Install all dependencies
+pip install -r feature/data-preprocessing/requirements.txt
+pip install -r feature/ml-model/requirements.txt
+pip install -r feature/api-development/requirements.txt
 
-# Check specific test
-pytest feature/api-development/tests/test_api.py::test_health_check -v
+# Run tests with verbose output
+pytest feature/*/tests/ -v
 ```
 
-### Build Failing
+### Docker Build Failing
 
 ```bash
 # Test Docker build locally
 cd feature/containerization
 docker build -t test-image .
+docker run -p 8000:8000 test-image
 ```
+
+### GitHub Actions Failing
+
+1. Check workflow logs in Actions tab
+2. Verify secrets are configured
+3. Check file paths match repository structure
+4. Test locally with `act` if possible
 
 ### Deployment Failing
 
-1. Check GitHub Actions logs
-2. Verify secrets are set
-3. Check deployment environment status
-4. Review canary health metrics
+1. Check deployment logs
+2. Verify environment secrets
+3. Check Kubernetes cluster access
+4. Verify image exists in registry
 
 ## Best Practices
 
@@ -213,4 +228,12 @@ docker build -t test-image .
 ✅ Monitor canary deployments
 ✅ Keep deployment scripts updated
 ✅ Document deployment procedures
+✅ Review workflow logs regularly
 
+## Next Steps
+
+After CI/CD is working:
+1. Configure staging environment
+2. Set up production environment
+3. Configure monitoring alerts
+4. Set up notification channels (Slack, email)

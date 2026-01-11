@@ -1,1 +1,86 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
 venv/
+ENV/
+env/
+.venv
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.hypothesis/
+*.cover
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Jupyter
+.ipynb_checkpoints
+*.ipynb
+
+# MLflow
+mlruns/
+mlartifacts/
+
+# Data
+*.csv
+data/
+*.pkl
+models/
+*.h5
+*.hdf5
+
+# Logs
+*.log
+logs/
+
+# Documentation/Notes (not part of project deliverables)
+NEXT_STEPS.md
+PHASE2_COMPLETE.md
+TEST_RESULTS.md
+TESTING_SETUP.md
+*.notes.md
+*.todo.md
+
+# Environment variables
+.env
+.env.local
+
+# Docker
+.dockerignore
+
+# Kubernetes
+*.kubeconfig
+
+# OS
+Thumbs.db
+.DS_Store
