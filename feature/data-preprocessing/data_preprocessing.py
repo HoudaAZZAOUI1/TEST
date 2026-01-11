@@ -205,7 +205,10 @@ class DataPreprocessor:
         """Save cleaned dataset"""
         import os  # Au cas où
 
-        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+        # Create output directory if it doesn't exist
+        output_dir = os.path.dirname(output_path)
+        if output_dir:  # Only create directory if path contains a directory
+            os.makedirs(output_dir, exist_ok=True)
         logger.info(f"Saving cleaned data to {output_path}")
         self.cleaned_df.to_csv(output_path, index=False)
 
@@ -222,7 +225,12 @@ class DataPreprocessor:
             },
         }
 
-        with open("data/data_summary.json", "w") as f:
+        # Create data directory if it doesn't exist
+        summary_dir = "data"
+        os.makedirs(summary_dir, exist_ok=True)
+        summary_path = os.path.join(summary_dir, "data_summary.json")
+        
+        with open(summary_path, "w") as f:
             json.dump(summary, f, indent=2)
 
         logger.info("Data preprocessing complete!")
