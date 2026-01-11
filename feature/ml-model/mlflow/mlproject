@@ -1,0 +1,24 @@
+name: recommendation_model
+
+conda_env: conda.yaml
+
+entry_points:
+  main:
+    parameters:
+      data_path:
+        type: str
+        default: "data/cleaned_data.csv"
+      n_recommendations:
+        type: int
+        default: 10
+      min_interactions:
+        type: int
+        default: 2
+      alpha:
+        type: float
+        default: 0.5
+      experiment_name:
+        type: str
+        default: "recommendation_model"
+    command: "python train.py {data_path} {n_recommendations} {min_interactions} {alpha} {experiment_name}"
+

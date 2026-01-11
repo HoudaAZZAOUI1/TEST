@@ -283,9 +283,21 @@ class CollaborativeFilteringModel:
         return model
 
 
-def train_with_mlflow(data_path: str, experiment_name: str = "recommendation_model"):
+def train_with_mlflow(data_path: str, experiment_name: str = "recommendation_model", 
+                      tracking_uri: str = None, alpha: float = 0.5):
     """Train model with MLflow tracking"""
-
+    
+    import os
+    
+    # Set MLflow tracking URI
+    if tracking_uri:
+        mlflow.set_tracking_uri(tracking_uri)
+    elif os.getenv("MLFLOW_TRACKING_URI"):
+        mlflow.set_tracking_uri(os.getenv("MLFLOW_TRACKING_URI"))
+    else:
+        # Default to local
+        mlflow.set_tracking_uri("http://localhost:5000")
+    
     # Set up MLflow
     mlflow.set_experiment(experiment_name)
 
@@ -320,10 +332,14 @@ def train_with_mlflow(data_path: str, experiment_name: str = "recommendation_mod
         model.create_interaction_matrix(train_df)
         model.compute_user_similarity()
         model.compute_item_similarity()
+        
+        # Store alpha for hybrid prediction
+        model.alpha = alpha
 
         # Evaluate
         metrics = model.evaluate(test_df)
         mlflow.log_metrics(metrics)
+        mlflow.log_param("alpha", alpha)
 
         # Save model
         model_path = "models/recommendation_model.pkl"
