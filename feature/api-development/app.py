@@ -11,18 +11,22 @@ static_dir = os.path.join(os.path.dirname(__file__), "static")
 if os.path.exists(static_dir):
     app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
+
 # Modèles de données
 class UserHistory(BaseModel):
     user_id: int
     viewed_products: List[int]
 
+
 class Response(BaseModel):
     user_id: int
     recommendations: List[int]
 
+
 @app.get("/health")
 def health_check():
     return {"status": "healthy"}
+
 
 @app.post("/predict", response_model=Response)
 def predict(history: UserHistory):

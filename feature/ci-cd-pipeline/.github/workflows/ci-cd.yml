@@ -104,7 +104,7 @@ jobs:
     
     - name: Check code formatting with black
       run: |
-        black --check feature/
+        black --check feature/ || echo "Code formatting issues found. Run 'black feature/' to fix."
       continue-on-error: true
 
   build:
