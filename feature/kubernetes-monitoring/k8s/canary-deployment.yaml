@@ -23,10 +23,12 @@ spec:
         app: recommendation-api
         version: canary
     spec:
+      imagePullSecrets:
+      - name: ghcr-secret
       containers:
       - name: recommendation-api
-        image: recommendation-api:canary
-        imagePullPolicy: IfNotPresent
+        image: ghcr.io/YOUR_USERNAME/YOUR_REPO:canary
+        imagePullPolicy: Always
         ports:
         - containerPort: 8000
           name: http

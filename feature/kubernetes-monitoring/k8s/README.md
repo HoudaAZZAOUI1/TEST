@@ -31,21 +31,60 @@ k8s/
 2. **kubectl**: Kubernetes command-line tool installed and configured
 3. **Docker Image**: The application Docker image should be available in your cluster's registry
 
-### Build and Push Docker Image
+### Setup Docker Image
 
+**Option 1: Using GitHub Container Registry (GHCR) - Recommended**
+
+The CI/CD pipeline automatically builds and pushes images to GHCR on every push.
+
+**Update manifests with your image:**
 ```bash
-# Build the Docker image
-cd api
-docker build -t recommendation-api:latest .
+cd feature/kubernetes-monitoring/k8s
+chmod +x setup-images.sh
+./setup-images.sh YOUR_USERNAME YOUR_REPO
+```
 
-# Tag for your registry (replace with your registry)
-docker tag recommendation-api:latest your-registry/recommendation-api:latest
+**Create image pull secret for GHCR:**
+```bash
+# Using GITHUB_TOKEN or Personal Access Token
+kubectl create secret docker-registry ghcr-secret \
+  --docker-server=ghcr.io \
+  --docker-username=YOUR_USERNAME \
+  --docker-password=$GITHUB_TOKEN \
+  --namespace=ecommerce-recommendation
+```
 
-# Push to registry
-docker push your-registry/recommendation-api:latest
+**Option 2: Using Your Own Registry**
+
+Update `deployment.yaml` and `canary-deployment.yaml` with your image:
+```yaml
+image: your-registry/recommendation-api:latest
 ```
 
 ### Deploy to Kubernetes
+
+#### Step 1: Setup Image Pull Secret (for GHCR)
+
+```bash
+# Create secret for GitHub Container Registry
+kubectl create secret docker-registry ghcr-secret \
+  --docker-server=ghcr.io \
+  --docker-username=YOUR_USERNAME \
+  --docker-password=$GITHUB_TOKEN \
+  --namespace=ecommerce-recommendation
+
+# Or create namespace first if it doesn't exist
+kubectl apply -f namespace.yaml
+```
+
+#### Step 2: Update Image Names (if using GHCR)
+
+```bash
+# Update manifests with your GHCR image
+cd feature/kubernetes-monitoring/k8s
+chmod +x setup-images.sh
+./setup-images.sh YOUR_USERNAME YOUR_REPO
+```
 
 #### Option 1: Using the deployment script
 
@@ -245,7 +284,7 @@ kubectl delete -f namespace.yaml
 
 ## 📝 Notes
 
-1. **Image Pull Policy**: Currently set to `IfNotPresent`. For production, use a proper image registry and set to `Always`.
+1. **Image Pull Policy**: Set to `Always` for GHCR images to ensure latest versions. Update image names in `deployment.yaml` and `canary-deployment.yaml` with your GHCR image.
 
 2. **Storage**: Prometheus and Grafana use `emptyDir` volumes. For production, use PersistentVolumes.
 
