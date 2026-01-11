@@ -1,0 +1,242 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        test-suite: [preprocessing, model, api]
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+        cache: 'pip'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pytest pytest-cov pytest-asyncio requests
+    
+    - name: Install preprocessing dependencies
+      if: matrix.test-suite == 'preprocessing'
+      run: |
+        pip install -r feature/data-preprocessing/requirements.txt
+    
+    - name: Install model dependencies
+      if: matrix.test-suite == 'model'
+      run: |
+        pip install -r feature/ml-model/requirements.txt
+    
+    - name: Install API dependencies
+      if: matrix.test-suite == 'api'
+      run: |
+        pip install -r feature/api-development/requirements.txt
+    
+    - name: Run preprocessing tests
+      if: matrix.test-suite == 'preprocessing'
+      run: |
+        cd feature/data-preprocessing
+        export PYTHONPATH="${PYTHONPATH}:$(pwd)"
+        pytest tests/ -v --cov=data_preprocessing --cov-report=xml --cov-report=term
+    
+    - name: Run model tests
+      if: matrix.test-suite == 'model'
+      run: |
+        cd feature/ml-model
+        export PYTHONPATH="${PYTHONPATH}:$(pwd)"
+        pytest tests/ -v --cov=recommendation_model --cov-report=xml --cov-report=term
+    
+    - name: Run API tests
+      if: matrix.test-suite == 'api'
+      run: |
+        cd feature/api-development
+        export PYTHONPATH="${PYTHONPATH}:$(pwd)"
+        pytest tests/ -v --cov=app --cov-report=xml --cov-report=term
+    
+    - name: Upload coverage to Codecov
+      if: always()
+      uses: codecov/codecov-action@v3
+      with:
+        files: |
+          feature/data-preprocessing/coverage.xml
+          feature/ml-model/coverage.xml
+          feature/api-development/coverage.xml
+        flags: ${{ matrix.test-suite }}
+        name: ${{ matrix.test-suite }}-coverage
+        fail_ci_if_error: false
+      continue-on-error: true
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+    
+    - name: Install linting tools
+      run: |
+        python -m pip install --upgrade pip
+        pip install flake8 black isort mypy
+    
+    - name: Run flake8
+      run: |
+        flake8 feature/ --count --select=E9,F63,F7,F82 --show-source --statistics
+        flake8 feature/ --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+      continue-on-error: true
+    
+    - name: Check code formatting with black
+      run: |
+        black --check feature/ || echo "Code formatting issues found. Run 'black feature/' to fix."
+      continue-on-error: true
+
+  build:
+    needs: [test, lint]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    permissions:
+      contents: read
+      packages: write
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+    
+    - name: Log in to Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Extract metadata
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+        tags: |
+          type=ref,event=branch
+          type=ref,event=pr
+          type=semver,pattern={{version}}
+          type=semver,pattern={{major}}.{{minor}}
+          type=sha
+          type=raw,value=latest,enable={{is_default_branch}}
+    
+    - name: Copy API files for Docker build
+      run: |
+        mkdir -p feature/containerization/api_files
+        cp feature/api-development/app.py feature/containerization/api_files/
+        # Copy static directory or create empty one
+        if [ -d "feature/api-development/static" ]; then
+          cp -r feature/api-development/static feature/containerization/api_files/
+        else
+          mkdir -p feature/containerization/api_files/static
+          echo "<!DOCTYPE html><html><body><h1>API Running</h1></body></html>" > feature/containerization/api_files/static/index.html
+        fi
+        cp feature/data-preprocessing/data_preprocessing.py feature/containerization/api_files/
+        cp feature/ml-model/recommendation_model.py feature/containerization/api_files/
+        cp feature/api-development/requirements.txt feature/containerization/api_files/
+        echo "Files copied for Docker build:"
+        ls -la feature/containerization/api_files/
+        ls -la feature/containerization/api_files/static/ || echo "Static directory check"
+    
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: feature/containerization
+        file: feature/containerization/Dockerfile
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+  deploy-staging:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/develop'
+    environment:
+      name: staging
+      url: ${{ secrets.STAGING_URL || 'https://staging.example.com' }}
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Deploy to staging
+      run: |
+        echo "Deploying to staging environment..."
+        echo "Image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
+        # Add your staging deployment commands here
+        # Example: kubectl set image deployment/recommendation-api \
+        #   recommendation-api=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }} \
+        #   -n staging
+
+  deploy-production:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    environment:
+      name: production
+      url: ${{ secrets.PRODUCTION_URL || 'https://production.example.com' }}
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Deploy canary to production
+      run: |
+        echo "Deploying canary to production..."
+        echo "Image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
+        # Add canary deployment commands here
+        # Example: kubectl apply -f feature/kubernetes-monitoring/k8s/canary-deployment.yaml
+    
+    - name: Wait for canary deployment
+      run: |
+        echo "Waiting for canary deployment to be ready..."
+        sleep 30  # Wait for deployment to stabilize
+        # kubectl wait --for=condition=available --timeout=300s \
+        #   deployment/recommendation-api-canary -n production
+    
+    - name: Run smoke tests
+      run: |
+        echo "Running smoke tests..."
+        bash feature/ci-cd-pipeline/scripts/smoke-test.sh || true
+    
+    - name: Check canary health
+      run: |
+        echo "Checking canary health..."
+        bash feature/ci-cd-pipeline/scripts/check-canary-health.sh || true
+    
+    - name: Promote canary to full deployment
+      if: success()
+      run: |
+        echo "Promoting canary to full deployment..."
+        # Add promotion commands here
+        # kubectl set image deployment/recommendation-api \
+        #   recommendation-api=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }} \
+        #   -n production
+    
+    - name: Rollback on failure
+      if: failure()
+      run: |
+        echo "Rolling back deployment..."
+        # Add rollback commands here
+        # kubectl rollout undo deployment/recommendation-api -n production
